@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime, timezone
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -192,17 +193,88 @@ def check_21st_page_urls(data):
     return rows
 
 
+JSON_REPORT = os.path.join(ROOT, "health-report.json")
+JSON_SCHEMA_VERSION = 1
+
+
+def now_iso():
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def previous_last_ok(path=JSON_REPORT):
+    """(kind, label) -> last_ok_at from the report this run is replacing.
+
+    A target that fails today keeps the date it last passed, so "last
+    verified" means the last time it worked, not the last time it was
+    probed. A missing or unreadable old report just means no history.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            old = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return {(t.get("kind"), t.get("label")): t.get("last_ok_at") for t in old.get("targets", [])}
+
+
+def write_json_report(results, counts, bad, known, known_issues, checked_at, page_url_checks):
+    """health-report.json, the machine-readable twin of health-report.md.
+
+    Schema: references/health-report-schema.md. The gallery reads it to show a
+    "last verified" date per entry.
+    """
+    history = previous_last_ok()
+    targets = []
+    for kind, name, url, status, detail in results:
+        when, meta = checked_at.get((kind, name), (now_iso(), {}))
+        rec = known_issue(known_issues, url, status)
+        last_ok = when if status == "ok" else history.get((kind, name))
+        targets.append({
+            "kind": kind,
+            "label": name,
+            "entry": meta.get("entry"),
+            "library": meta.get("library"),
+            "framework": meta.get("framework"),
+            "url": url if url != "-" else None,
+            "status": status,
+            "detail": detail,
+            "known_issue": rec["issue"] if rec else None,
+            "checked_at": when,
+            "last_ok_at": last_ok,
+        })
+    payload = {
+        "schema_version": JSON_SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "summary": {
+            "targets": len(results),
+            "ok": counts.get("ok", 0),
+            "rate_limited": counts.get("rate-limited", 0),
+            "challenged": counts.get("challenged", 0),
+            "dead": counts.get("dead", 0),
+            "error": counts.get("error", 0),
+            "needs_attention": len(bad),
+            "known_issues": len(known),
+        },
+        "targets": targets,
+        "page_urls": [
+            {"entry": n, "stored_url": u, "status": st, "detail": d} for n, u, st, d in page_url_checks
+        ],
+    }
+    with open(JSON_REPORT, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+        f.write("\n")
+
+
 def main():
     data = load()
     known_issues = _known_issues_by_host(data)
 
+    # Each target carries (kind, label, url, meta). meta is what
+    # health-report.json needs to tie a result back to one registry entry and
+    # framework, which the label alone only does by string convention.
     targets = []
     for entry in data.get("showpiece", []):
-        url = target_url(entry)
-        if url:
-            targets.append(("showpiece", f"{entry['library']}/{entry['name']}", url))
-        else:
-            targets.append(("showpiece", f"{entry['library']}/{entry['name']}", None))
+        meta = {"entry": entry["name"], "library": entry["library"], "framework": "react"}
+        targets.append(("showpiece", f"{entry['library']}/{entry['name']}", target_url(entry), meta))
 
         # Framework variants point at entirely different registries (vue-bits,
         # svelte-bits, inspira-ui), so a React ref staying healthy says nothing
@@ -210,34 +282,40 @@ def main():
         # with a real rollout that is a blind spot the size of the rollout.
         for framework, variant in (entry.get("frameworks") or {}).items():
             label = f"{variant.get('library')}/{entry['name']} [{framework}]"
-            targets.append(("variant", label, target_url(variant)))
+            meta = {"entry": entry["name"], "library": variant.get("library"), "framework": framework}
+            targets.append(("variant", label, target_url(variant), meta))
     for lib in data.get("code_libraries", []):
+        meta = {"entry": None, "library": lib["name"], "framework": None}
         if lib.get("site"):
-            targets.append(("library site", lib["name"], lib["site"]))
+            targets.append(("library site", lib["name"], lib["site"], meta))
         # A mirror is the host that curated entries actually resolve through when
         # the library's own registry is gated (21st.dev -> kokonutui.com). Probing
         # only the gated site would report the library healthy while the host doing
         # the real work is down, so mirrors get their own target.
         if lib.get("mirror_site"):
-            targets.append(("library mirror", f"{lib['name']} mirror", lib["mirror_site"]))
+            targets.append(("library mirror", f"{lib['name']} mirror", lib["mirror_site"], meta))
 
     # All 45+ targets used to queue behind one fixed DELAY regardless of host, so
     # a slow host held up every other host's checks too. Group by host instead:
     # different hosts run concurrently, but requests to the *same* host stay
     # serial with DELAY between them, which is the actual point of being polite.
     by_host = defaultdict(list)
-    for kind, name, url in targets:
+    for kind, name, url, meta in targets:
         host = urllib.parse.urlparse(url).hostname if url else None
-        by_host[host].append((kind, name, url))
+        by_host[host].append((kind, name, url, meta))
+
+    checked_at = {}
 
     def process_host(host_targets):
         out = []
-        for kind, name, url in host_targets:
+        for kind, name, url, meta in host_targets:
             if url is None:
                 out.append((kind, name, "-", "error", "no URL found in ref"))
+                checked_at[(kind, name)] = (now_iso(), meta)
                 continue
             status, detail = probe(url)
             out.append((kind, name, url, status, detail))
+            checked_at[(kind, name)] = (now_iso(), meta)
             flag = " (known issue)" if known_issue(known_issues, url, status) else ""
             print(f"{status:<13} {name:<40} {detail}{flag}", flush=True)
             time.sleep(DELAY)
@@ -325,6 +403,8 @@ def main():
     report = "\n".join(lines) + "\n"
     with open(os.path.join(ROOT, "health-report.md"), "w", encoding="utf-8") as f:
         f.write(report)
+
+    write_json_report(results, counts, bad, known, known_issues, checked_at, page_url_checks)
 
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
