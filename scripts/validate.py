@@ -10,6 +10,7 @@ printed, not just the first, so one run tells you everything to fix.
 """
 
 import json
+import re
 import sys
 
 from _registry import COMPONENTS_JSON, load
@@ -86,17 +87,52 @@ def check_fetch(label, entry, errors):
             errors.append(f"{label}: fetch.url {url!r} does not appear in ref {ref.strip()!r}")
 
 
-def check_entries(entries, kind, errors):
-    """Required fields, duplicate names, and field shapes, for one array."""
+def array_span(text, key):
+    """(start, end) character offsets of the JSON array at top-level `key`, or None.
+
+    Only used to turn a duplicate name into line numbers, so a file this cannot
+    locate the array in just gets the message without them.
+    """
+    m = re.search(r'"%s"\s*:\s*\[' % re.escape(key), text)
+    if not m:
+        return None
+    start = m.end() - 1
+    try:
+        _, end = json.JSONDecoder().raw_decode(text, start)
+    except json.JSONDecodeError:
+        return None
+    return start, end
+
+
+def name_lines(text, span, name):
+    """1-based line numbers of every `"name": "<name>"` inside `span` of `text`."""
+    if not text or not span:
+        return []
+    pattern = re.compile(r'"name"\s*:\s*%s' % re.escape(json.dumps(name)))
+    start, end = span
+    return [text.count("\n", 0, m.start()) + 1 for m in pattern.finditer(text, start, end)]
+
+
+def check_entries(entries, kind, errors, text=None, span=None):
+    """Required fields, duplicate names, and field shapes, for one array.
+
+    `text` and `span` are the raw file and this array's offsets in it. When
+    given, a duplicate name is reported with the line of every copy, so the
+    fix does not start with a search through an 800-line file.
+    """
     names = set()
+    reported = set()
     required = REQUIRED + SHOWPIECE_ONLY_REQUIRED if kind == "showpiece" else REQUIRED
     for c in entries:
         n = c.get("name")
         if not n:
             errors.append(f"{kind} entry missing 'name'")
             continue
-        if n in names:
-            errors.append(f"duplicate {kind} name: {n}")
+        if n in names and n not in reported:
+            lines = name_lines(text, span, n)
+            where = f" (lines {', '.join(map(str, lines))})" if len(lines) > 1 else ""
+            errors.append(f"duplicate {kind} name: {n}{where}")
+            reported.add(n)
         names.add(n)
         for key in required:
             if not c.get(key):
@@ -242,8 +278,12 @@ def check_alias_collisions(showpiece, errors):
             )
 
 
-def validate(data):
-    """Return a list of problems. Empty list means valid."""
+def validate(data, text=None):
+    """Return a list of problems. Empty list means valid.
+
+    `text` is the raw components.json, used only to put line numbers on
+    duplicate names. Callers holding just the parsed data can leave it out.
+    """
     errors = []
 
     libs = data.get("code_libraries", [])
@@ -259,8 +299,8 @@ def validate(data):
     if not fb:
         errors.append("no fallback_basic components found")
 
-    check_entries(showpiece, "showpiece", errors)
-    check_entries(fb, "fallback", errors)
+    check_entries(showpiece, "showpiece", errors, text, array_span(text, "showpiece") if text else None)
+    check_entries(fb, "fallback", errors, text, array_span(text, "components") if text else None)
 
     # showpiece[] only. fallback_basic refs are shadcn shorthand ("npx shadcn@latest
     # add button") or prose compose instructions with no URL at all, and no consumer
@@ -294,6 +334,8 @@ def validate(data):
 def main():
     try:
         data = load()
+        with open(COMPONENTS_JSON, encoding="utf-8") as f:
+            text = f.read()
     except FileNotFoundError:
         print(f"components.json not found at {COMPONENTS_JSON}")
         return 1
@@ -301,7 +343,7 @@ def main():
         print(f"components.json is not valid JSON: {e}")
         return 1
 
-    errors = validate(data)
+    errors = validate(data, text)
     if errors:
         print(f"{len(errors)} problem(s) in components.json:\n")
         print("\n".join(f"  - {e}" for e in errors))
