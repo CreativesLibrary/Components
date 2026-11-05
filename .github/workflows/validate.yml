@@ -7,6 +7,7 @@ on:
       - "scripts/validate.py"
       - "scripts/test_validate.py"
       - "scripts/_registry.py"
+      - "scripts/registry_pin.py"
       - ".github/workflows/validate.yml"
   pull_request:
     paths:
@@ -14,6 +15,7 @@ on:
       - "scripts/validate.py"
       - "scripts/test_validate.py"
       - "scripts/_registry.py"
+      - "scripts/registry_pin.py"
   workflow_dispatch:
   schedule:
     # Quarterly sanity check (1st of Jan/Apr/Jul/Oct, 06:00 UTC).

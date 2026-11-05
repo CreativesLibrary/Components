@@ -14,6 +14,7 @@ import re
 import sys
 
 from _registry import COMPONENTS_JSON, load
+from registry_pin import PIN_METHODS
 
 # CONTRIBUTING.md requires the same fields of both arrays. effect is showpiece-only:
 # it's the live-fetch match surface's descriptive half, and fallback_basic entries
@@ -80,6 +81,8 @@ def check_fetch(label, entry, errors):
     if not url.startswith("https://"):
         errors.append(f"{label}: fetch.url must be https, got {url!r}")
 
+    check_pin(label, fetch, errors)
+
     ref = entry.get("ref") or ""
     if method == "registry_cli":
         cli = fetch.get("cli")
@@ -131,6 +134,40 @@ def name_lines(text, span, name):
     pattern = re.compile(r'"name"\s*:\s*%s' % re.escape(json.dumps(name)))
     start, end = span
     return [text.count("\n", 0, m.start()) + 1 for m in pattern.finditer(text, start, end)]
+
+
+PIN_KEYS = {"ref", "path", "sha256", "pinned_at"}
+PIN_REF = re.compile(r"^github:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def check_pin(label, fetch, errors):
+    """fetch.pin is written by scripts/pin-registry.py, never by hand (#64).
+
+    Only its shape is checked here. Whether it still matches upstream is a
+    network question, and health-check.py answers it weekly.
+    """
+    pin = fetch.get("pin")
+    if pin is None:
+        return
+    if not isinstance(pin, dict):
+        errors.append(f"{label}: fetch.pin must be an object, got {type(pin).__name__}")
+        return
+    if fetch.get("method") not in PIN_METHODS:
+        errors.append(f"{label}: fetch.pin is only meaningful for {sorted(PIN_METHODS)}, not {fetch.get('method')!r}")
+    keys = set(pin)
+    if keys != PIN_KEYS:
+        missing, extra = sorted(PIN_KEYS - keys), sorted(keys - PIN_KEYS)
+        errors.append(f"{label}: fetch.pin keys must be {sorted(PIN_KEYS)} (missing {missing}, unexpected {extra})")
+    if not PIN_REF.match(str(pin.get("ref", ""))):
+        errors.append(f"{label}: fetch.pin.ref must be github:<owner>/<repo>@<40-hex sha>, got {pin.get('ref')!r}")
+    if not SHA256.match(str(pin.get("sha256", ""))):
+        errors.append(f"{label}: fetch.pin.sha256 must be 64 lowercase hex, got {pin.get('sha256')!r}")
+    if not ISO_DATE.match(str(pin.get("pinned_at", ""))):
+        errors.append(f"{label}: fetch.pin.pinned_at must be YYYY-MM-DD, got {pin.get('pinned_at')!r}")
+    if not isinstance(pin.get("path"), str) or not pin.get("path"):
+        errors.append(f"{label}: fetch.pin.path missing")
 
 
 def check_entries(entries, kind, errors, text=None, span=None):

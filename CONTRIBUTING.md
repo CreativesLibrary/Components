@@ -55,6 +55,14 @@ No component source code lives here. The repo stores pointers, and the real code
   places correctly** (Svelte Bits, #66). Its `ref` must be exactly
   `fetch registry item "<url>", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]`;
   `validate.py` enforces that, as it does the command form for `registry_cli`.
+- **`fetch.pin` is written by `scripts/pin-registry.py`, never by hand.** For a
+  library with a `registry_source` (its registry JSON is committed on GitHub), the
+  pin records the commit whose file matches the live item and a sha256 of it as
+  canonical JSON. `fetch.url` stays live; the pin is a receipt, not a copy (#64).
+  `health-check.py` reports a ref whose live item no longer matches as `drifted`.
+  Review the upstream change at the compare link it prints, then re-run
+  `GITHUB_TOKEN=... python3 scripts/pin-registry.py`. A new entry on a pinnable host
+  fails `scripts/test_validate.py` until it is pinned.
 - **`fetch` applies to `showpiece[]` and its `frameworks.*` variants only.**
   `fallback_basic` refs are shadcn shorthand or prose compose instructions with no
   URL, and nothing fetches or executes them.

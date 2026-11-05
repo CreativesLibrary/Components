@@ -19,7 +19,7 @@ Use it to answer "did this entry's upstream respond the last time anyone checked
 | Field | Meaning |
 |---|---|
 | `targets` | Number of URLs probed. |
-| `ok`, `rate_limited`, `challenged`, `dead`, `error` | Count per status. |
+| `ok`, `rate_limited`, `challenged`, `dead`, `drifted`, `error` | Count per status. |
 | `needs_attention` | Failures not covered by a `known_issues[]` record. This is the number the weekly workflow opens an issue on. |
 | `known_issues` | Failures that match a documented `known_issues[]` record exactly (same host, same status). |
 
@@ -33,9 +33,10 @@ Use it to answer "did this entry's upstream respond the last time anyone checked
 | `library` | string | The library the URL belongs to (the variant's library for a `variant`). |
 | `framework` | string or null | `react` for a top-level showpiece, the `frameworks` key for a variant, `null` for library targets. |
 | `url` | string or null | The URL probed. `null` when the entry had no URL to probe. |
-| `status` | string | `ok`, `rate-limited`, `challenged`, `dead`, or `error`. See the script's `probe()`. |
+| `status` | string | `ok`, `rate-limited`, `challenged`, `dead`, `drifted`, or `error`. See the script's `probe()` and `check_pin()`. `drifted` means the URL resolves but its registry item no longer matches the entry's `fetch.pin` (#64). |
 | `detail` | string | Short reason, e.g. `HTTP 200` or `HTTP 429 (bot-challenge page, not throttling)`. |
 | `known_issue` | integer or null | Issue number from `known_issues[]` when this failure is already documented. |
+| `pin` | string or null | `match` or `drifted` when the entry carries a `fetch.pin`, `unreadable` when the body was not JSON, `null` when there is no pin or the URL did not resolve. |
 | `checked_at` | string | ISO 8601 UTC time this target was probed. |
 | `last_ok_at` | string or null | Last time this target returned `ok`. Equal to `checked_at` on success. On a failure it carries over from the previous `health-report.json` in the same checkout, or is `null` when there is none. |
 

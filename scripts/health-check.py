@@ -24,6 +24,7 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from _registry import ROOT, load
+from registry_pin import canonical_sha256
 
 TIMEOUT = 25
 DELAY = 0.4  # be a polite guest on other people's registries, per host
@@ -238,6 +239,7 @@ def write_json_report(results, counts, bad, known, known_issues, checked_at, pag
             "status": status,
             "detail": detail,
             "known_issue": rec["issue"] if rec else None,
+            "pin": meta.get("pin_state"),
             "checked_at": when,
             "last_ok_at": last_ok,
         })
@@ -251,6 +253,7 @@ def write_json_report(results, counts, bad, known, known_issues, checked_at, pag
             "challenged": counts.get("challenged", 0),
             "dead": counts.get("dead", 0),
             "error": counts.get("error", 0),
+            "drifted": counts.get("drifted", 0),
             "needs_attention": len(bad),
             "known_issues": len(known),
         },
@@ -264,6 +267,35 @@ def write_json_report(results, counts, bad, known, known_issues, checked_at, pag
         f.write("\n")
 
 
+def fetch_body(url):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        return r.read()
+
+
+def check_pin(url, pin, detail):
+    """Compare a reachable ref's live item with its fetch.pin receipt (#64).
+
+    Returns (status, detail, pin_state). A mismatch becomes status
+    `drifted`, which counts as needing attention: upstream changed what this
+    showpiece resolves to since it was last verified, and that should be a
+    reviewed decision, not something the registry absorbs silently.
+    """
+    try:
+        live = canonical_sha256(fetch_body(url))
+    except Exception as e:  # noqa: BLE001 - reachable but not readable JSON is its own finding
+        return "error", f"{detail}, but the body is not registry JSON ({type(e).__name__})", "unreadable"
+    if live == pin["sha256"]:
+        return "ok", f"{detail}, matches pin from {pin['pinned_at']}", "match"
+    repo, _, sha = pin["ref"].removeprefix("github:").partition("@")
+    return (
+        "drifted",
+        f"changed upstream since the {pin['pinned_at']} pin; review "
+        f"https://github.com/{repo}/compare/{sha[:12]}...HEAD then run scripts/pin-registry.py",
+        "drifted",
+    )
+
+
 def main():
     data = load()
     known_issues = _known_issues_by_host(data)
@@ -273,7 +305,7 @@ def main():
     # framework, which the label alone only does by string convention.
     targets = []
     for entry in data.get("showpiece", []):
-        meta = {"entry": entry["name"], "library": entry["library"], "framework": "react"}
+        meta = {"entry": entry["name"], "library": entry["library"], "framework": "react", "pin": entry["fetch"].get("pin") if isinstance(entry.get("fetch"), dict) else None}
         targets.append(("showpiece", f"{entry['library']}/{entry['name']}", target_url(entry), meta))
 
         # Framework variants point at entirely different registries (vue-bits,
@@ -282,7 +314,8 @@ def main():
         # with a real rollout that is a blind spot the size of the rollout.
         for framework, variant in (entry.get("frameworks") or {}).items():
             label = f"{variant.get('library')}/{entry['name']} [{framework}]"
-            meta = {"entry": entry["name"], "library": variant.get("library"), "framework": framework}
+            vf = variant.get("fetch") if isinstance(variant.get("fetch"), dict) else {}
+            meta = {"entry": entry["name"], "library": variant.get("library"), "framework": framework, "pin": vf.get("pin")}
             targets.append(("variant", label, target_url(variant), meta))
     for lib in data.get("code_libraries", []):
         meta = {"entry": None, "library": lib["name"], "framework": None}
@@ -314,8 +347,11 @@ def main():
                 checked_at[(kind, name)] = (now_iso(), meta)
                 continue
             status, detail = probe(url)
+            pin_state = None
+            if status == "ok" and meta.get("pin"):
+                status, detail, pin_state = check_pin(url, meta["pin"], detail)
             out.append((kind, name, url, status, detail))
-            checked_at[(kind, name)] = (now_iso(), meta)
+            checked_at[(kind, name)] = (now_iso(), {**meta, "pin_state": pin_state})
             flag = " (known issue)" if known_issue(known_issues, url, status) else ""
             print(f"{status:<13} {name:<40} {detail}{flag}", flush=True)
             time.sleep(DELAY)
@@ -341,7 +377,7 @@ def main():
         f"Checked **{len(results)}** targets: "
         f"{counts.get('ok', 0)} ok, {counts.get('rate-limited', 0)} rate-limited, "
         f"{counts.get('challenged', 0)} challenged, "
-        f"{counts.get('dead', 0)} dead, {counts.get('error', 0)} error.",
+        f"{counts.get('dead', 0)} dead, {counts.get('drifted', 0)} drifted, {counts.get('error', 0)} error.",
         "",
         f"**{len(bad)}** need attention. "
         f"{len(known)} are already-documented upstream issues and are not counted.",
@@ -361,7 +397,8 @@ def main():
             "`rate-limited` may be transient; `challenged` is a bot-detection page "
             "(e.g. Vercel Attack Challenge Mode) and will not clear on retry; `dead` "
             "means the ref no longer resolves and any user asking for that showpiece "
-            "gets a failure.",
+            "gets a failure; `drifted` means the ref still resolves but serves different "
+            "content than its `fetch.pin` receipt, so review the upstream change and re-pin.",
             "",
         ]
     else:

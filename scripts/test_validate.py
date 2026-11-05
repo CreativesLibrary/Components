@@ -106,11 +106,85 @@ class ValidateTests(unittest.TestCase):
             validate(data),
         )
 
+    def _pinned(self, data):
+        return next(e for e in data["showpiece"] if e["fetch"].get("pin"))
+
+    def test_malformed_pin_fails(self):
+        for field, bad, expect in [
+            ("ref", "magicui@main", "fetch.pin.ref must be github:"),
+            ("sha256", "abc", "fetch.pin.sha256 must be 64 lowercase hex"),
+            ("pinned_at", "last week", "fetch.pin.pinned_at must be YYYY-MM-DD"),
+        ]:
+            data = registry()
+            entry = self._pinned(data)
+            entry["fetch"]["pin"][field] = bad
+            errors = validate(data)
+            self.assertTrue(any(expect in e for e in errors), (field, errors))
+
+    def test_pin_with_missing_or_extra_keys_fails(self):
+        data = registry()
+        entry = self._pinned(data)
+        del entry["fetch"]["pin"]["path"]
+        entry["fetch"]["pin"]["note"] = "x"
+        self.assertTrue(any("fetch.pin keys must be" in e for e in validate(data)))
+
+    def test_pin_on_a_page_fetch_fails(self):
+        data = registry()
+        entry = next(e for e in data["showpiece"] if e["fetch"]["method"] == "webfetch")
+        pinned = self._pinned(data)["fetch"]["pin"]
+        entry["fetch"]["pin"] = dict(pinned)
+        self.assertTrue(any("fetch.pin is only meaningful" in e for e in validate(data)))
+
+
     def test_placeholder_license_fails(self):
         data = registry()
         data["showpiece"][0]["license"] = "TBD"
         name = data["showpiece"][0]["name"]
         self.assertTrue(any(e.startswith(f"{name}: license is a placeholder") for e in validate(data)))
+
+
+
+class RegistryPinTests(unittest.TestCase):
+    def test_hash_ignores_key_order_and_whitespace(self):
+        from registry_pin import canonical_sha256
+
+        a = canonical_sha256(b'{"name": "x", "files": [{"content": "a"}]}')
+        b = canonical_sha256('{\n  "files":[{"content":"a"}],\n  "name":"x"\n}')
+        self.assertEqual(a, b)
+        self.assertNotEqual(a, canonical_sha256(b'{"name": "y", "files": [{"content": "a"}]}'))
+
+    def test_source_for_maps_host_to_repo_path(self):
+        from registry_pin import source_for
+
+        data = load()
+        self.assertEqual(
+            source_for(data, "https://magicui.design/r/marquee.json"),
+            {"repo": "magicuidesign/magicui", "path": "apps/www/public/r/marquee.json"},
+        )
+        # reactbits URLs omit .json; the committed file has it.
+        self.assertEqual(
+            source_for(data, "https://reactbits.dev/r/SplitText-TS-TW")["path"], "public/r/SplitText-TS-TW.json"
+        )
+        self.assertIsNone(source_for(data, "https://ui.aceternity.com/registry/3d-card.json"))
+
+    def test_pinnable_excludes_known_issue_hosts_and_page_fetches(self):
+        from registry_pin import iter_pinnable
+
+        labels = {label for label, _ in iter_pinnable(load())}
+        data = load()
+        cult = [e["name"] for e in data["showpiece"] if e["library"] == "cult-ui"]
+        self.assertTrue(cult)
+        self.assertFalse(labels & set(cult))
+        self.assertIn("marquee", labels)
+        self.assertIn("blur-text.frameworks.svelte", labels)
+
+    def test_every_pinnable_ref_is_pinned(self):
+        # A new pinnable entry merged without running pin-registry.py would be
+        # the "never checked" state #64 exists to make visible.
+        from registry_pin import iter_pinnable
+
+        unpinned = [label for label, holder in iter_pinnable(load()) if not holder["fetch"].get("pin")]
+        self.assertEqual(unpinned, [], "run python3 scripts/pin-registry.py")
 
 
 if __name__ == "__main__":
