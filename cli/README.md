@@ -24,6 +24,7 @@ npx components-skill@latest update               # refresh, keeping your edits
 npx components-skill@latest list                 # what is installed where, and whether it is current
 npx components-skill@latest search "laptop opening"   # find a showpiece before installing
 npx components-skill@latest tokens                    # read this project's brand tokens
+npx components-skill@latest verify src/components/ui/marquee.tsx   # check an adapted component
 ```
 
 ### Options
@@ -36,7 +37,10 @@ npx components-skill@latest tokens                    # read this project's bran
 | `--dry-run` | On `add`, print every file that would be written and the install root it goes under, plus the manifest. Creates no directories and writes no files. |
 | `--library <name>` | On `search`, restrict results to one source library (`aceternity`, `magicui`, `cult-ui`, `reactbits`, `21st.dev`, `shadcn`, `tremor`, or a port library such as `vue-bits`, `inspira-ui`, `svelte-bits`). |
 | `--framework <fw>` | On `search`, which port to search: `react` (default), `vue`, or `svelte`. Composes with `--library`. |
-| `--json` | On `search`, `tokens`, and `list`, print machine-readable JSON instead of a summary. |
+| `--json` | On `search`, `tokens`, `list`, and `verify`, print machine-readable JSON instead of a summary. |
+| `--project <dir>` | On `verify`, the project root (default: nearest `package.json` above the file). |
+| `--skip <checks>` | On `verify`, comma list of `colors`, `motion`, `typecheck`, `render`. |
+| `--export <name>`, `--props <json>` | On `verify`, which export to render and the props to render it with. |
 | `-v`, `--version` | Print the version. |
 
 ## `search`: find a showpiece before you install
@@ -137,9 +141,38 @@ Missing 6/20. Adapt onto the closest existing token, or run `npx shadcn@latest i
 
 `--json` prints the full structure (`light`, `dark`, `tailwindConfigColors`, `knownTokens`, `missingKnownTokens`) instead, for a tool to consume rather than a human to read. Entirely offline and read-only: it never writes to the target project.
 
+## `verify`: check an adapted component in its project
+
+`references/adaptation.md` says a fetched component is never pasted raw: tokens instead of demo colors, a reduced-motion guard, and it has to compile and render. `verify` checks those on the file an agent actually placed, in the project it landed in:
+
+```
+$ npx components-skill@latest verify src/components/ui/marquee.tsx
+verify /path/to/app/src/components/ui/marquee.tsx (react)
+project /path/to/app
+  [pass] colors     no hardcoded hex or default-palette color classes
+  [FAIL] motion     no reduced-motion guard: add useReducedMotion(), a motion-reduce: / motion-safe: variant, ...
+  [pass] typecheck  no type errors in this file (tsc -p tsconfig.app.json)
+  [pass] render     <Marquee /> rendered without throwing (533 chars of HTML)
+
+1 check(s) failed.
+```
+
+| Check | What it does | Needs in the project |
+|---|---|---|
+| `colors` | Finds hex literals and Tailwind default-palette classes (`bg-zinc-900`, `text-black/50`, `dark:border-slate-700`) left from the demo. Comments are ignored; a line with `verify-ignore` on it is skipped. | nothing |
+| `motion` | Fails unless the file has a reduced-motion guard: `useReducedMotion`, `motion-reduce:` / `motion-safe:`, `prefers-reduced-motion`, `<MotionConfig reducedMotion>`, VueUse's `usePreferredReducedMotion`, or Svelte's `prefersReducedMotion`. | nothing |
+| `typecheck` | Runs the project's own compiler against the tsconfig that covers the file (following a Vite-style `references` root to `tsconfig.app.json`), scoped to the file and its imports. Errors in other files are counted, not failed. | `typescript`, `vue-tsc` for `.vue`, or `svelte-check` for `.svelte` |
+| `render` | Bundles the file with the project's esbuild (tsconfig paths resolved, React external) and renders it with `react-dom/server`. A throw fails; touching `window` during render is a warning, since it only breaks SSR. React only for now. | `esbuild` (Vite ships it), `react`, `react-dom` |
+
+A check whose tool is not installed is reported as `skip`, never as a pass. Exit code is `1` only when a check fails.
+
+`render` picks the default export, else the export named after the file (`shiny-badge.tsx` -> `ShinyBadge`), else the first component export. `--export <name>` picks one, and `--props '{"text":"Hi"}'` passes the props a component needs. `--skip render,typecheck` drops checks, `--project <dir>` sets the project root when the nearest `package.json` above the file is not it, and `--json` prints the result for a tool to read.
+
+`typecheck` writes a temporary `.components-verify-*.json` next to the tsconfig and `render` writes its bundle under `node_modules/.cache/components-skill-verify/`. Both are removed when the check finishes. Nothing else in the project is touched.
+
 ## Offline by design
 
-The bundles are built into the package at publish time, so `add` copies from disk and never reaches the network. An installer that needs to fetch from GitHub fails in exactly the environments where you most want it to work (offline, proxied, locked-down CI), and it would pin behaviour to whatever is on `main` rather than to the version you asked for.
+The bundles are built into the package at publish time, so `add` copies from disk and never reaches the network. `verify` uses the target project's own compiler and bundler rather than shipping its own, which keeps the package at zero runtime dependencies. An installer that needs to fetch from GitHub fails in exactly the environments where you most want it to work (offline, proxied, locked-down CI), and it would pin behaviour to whatever is on `main` rather than to the version you asked for.
 
 ## Links
 

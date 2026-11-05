@@ -43,7 +43,7 @@ user wants a UI component (React + Tailwind)?
 4. Run `ref`. If `fetch.method` is `registry_item` (every Svelte Bits variant), `ref` is not a command: GET `fetch.url`, write each `files[].content` to its `target` with a leading `$lib/` resolved to `src/lib/`, and install its `dependencies[]`. No CLI places those files correctly yet (#66). If the registry shorthand fails (library changed it), open the `site` page, confirm the current command, retry. Last resort: WebFetch the page and write the code manually. (`ref` is the display form of the entry's `fetch` object; if you are writing tooling, read `fetch.url` / `fetch.cli` and never parse the command string.)
 5. Install `deps`. Most need `motion` (framer-motion). 3D globe needs `cobe`; wavy bg needs `simplex-noise`. **`deps` is not optional detail**: it records peer dependencies the registry item itself does not declare, and the component will not compile without them (every Inspira UI variant needs `@inspira-ui/plugins` for `cn()`, which its registry JSON omits).
 6. Adapt (mandatory - never raw): map demo colors to brand tokens, wrap motion in `prefers-reduced-motion`, check mobile.
-7. Verify it compiles + renders, then hand off to a quality skill if one is installed
+7. Verify it compiles + renders (`npx components-skill@latest verify <file>` checks colors, the reduced-motion guard, a project-context typecheck, and a smoke-render in one go), then hand off to a quality skill if one is installed
    (`references/handoff.md`). Otherwise the adapted component is already the final output.
 
 ## Rules

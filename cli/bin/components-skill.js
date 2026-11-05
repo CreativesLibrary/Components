@@ -5,6 +5,7 @@ import { update } from "../src/commands/update.js";
 import { search, formatResults, toJson } from "../src/commands/search.js";
 import { extractTokens, formatTokens } from "../src/commands/tokens.js";
 import { list, formatList } from "../src/commands/list.js";
+import { verify, formatVerify, CHECKS } from "../src/commands/verify.js";
 import { packageVersion } from "../src/lib/dist.js";
 import { AGENTS } from "../src/lib/layout.js";
 
@@ -16,6 +17,7 @@ Usage:
   npx components-skill@latest list [options]
   npx components-skill@latest search <query> [options]
   npx components-skill@latest tokens [path] [options]
+  npx components-skill@latest verify <file> [options]
 
 Options:
   --agent <name>    ${AGENTS.join(" | ")} | all      (default: claude for add/update, every agent for list)
@@ -24,7 +26,11 @@ Options:
   --dry-run         add: print every file that would be written, and where; write nothing
   --library <name>  search: restrict to one source library
   --framework <fw>  search: react | vue | svelte (default react); composes with --library
-  --json            search, tokens, list: print machine-readable JSON instead of a summary
+  --json            search, tokens, list, verify: print machine-readable JSON instead of a summary
+  --project <dir>   verify: the project the file lives in (default: nearest package.json above it)
+  --skip <checks>   verify: comma list of ${CHECKS.join(", ")}
+  --export <name>   verify: which export to render (default: default export, else the one named after the file)
+  --props <json>    verify: props to render it with, e.g. '{"text":"Hi"}'
   -h, --help        show this
   -v, --version     print the version
 
@@ -41,6 +47,8 @@ Examples:
   npx components-skill@latest search text --framework svelte --json
   npx components-skill@latest tokens                  # read this project's brand tokens
   npx components-skill@latest tokens ../other-app --json
+  npx components-skill@latest verify src/components/ui/marquee.tsx
+  npx components-skill@latest verify src/lib/BlurText.svelte --skip render
 `;
 
 /**
@@ -70,13 +78,21 @@ function parse(argv) {
       opts.framework = argv[++i];
       if (!opts.framework || opts.framework.startsWith("-")) throw new Error("--framework needs a value");
     } else if (a.startsWith("--framework=")) opts.framework = a.slice("--framework=".length);
+    else if (["--project", "--skip", "--export", "--props"].includes(a)) {
+      const key = a.slice(2);
+      opts[key] = argv[++i];
+      if (opts[key] === undefined || (key !== "props" && opts[key].startsWith("-"))) throw new Error(`${a} needs a value`);
+    } else if (/^--(project|skip|export|props)=/.test(a)) {
+      const eq = a.indexOf("=");
+      opts[a.slice(2, eq)] = a.slice(eq + 1);
+    }
     else if (a.startsWith("-")) throw new Error(`Unknown flag: ${a}`);
     else opts._.push(a);
   }
   return opts;
 }
 
-function main(argv) {
+async function main(argv) {
   let opts;
   try {
     opts = parse(argv);
@@ -108,6 +124,11 @@ function main(argv) {
       update(opts);
       return 0;
     }
+    if (cmd === "verify") {
+      const result = await verify(opts._[1], opts);
+      console.log(opts.json ? JSON.stringify(result, null, 2) : formatVerify(result));
+      return result.ok ? 0 : 1;
+    }
     if (cmd === "list") {
       const result = list(opts);
       console.log(opts.json ? JSON.stringify(result, null, 2) : formatList(result));
@@ -137,4 +158,4 @@ function main(argv) {
   }
 }
 
-process.exit(main(process.argv.slice(2)));
+main(process.argv.slice(2)).then((code) => process.exit(code));
