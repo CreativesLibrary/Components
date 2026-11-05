@@ -31,8 +31,9 @@ npx components-skill@latest tokens                    # read this project's bran
 | `--agent <name>` | `claude` \| `codex` \| `cursor` \| `gemini` \| `all`. Default `claude`. Comma-separated lists work too. `add`/`update` only. |
 | `--global` | Install into your user config dir instead of the current project. Not supported for Cursor, which has no documented user-level rules directory. |
 | `--force` | On `update`, overwrite files you have edited locally. |
-| `--library <name>` | On `search`, restrict results to one source library (`aceternity`, `magicui`, `cult-ui`, `reactbits`, `21st.dev`, `shadcn`, `tremor`). |
-| `--json` | On `tokens`, print the raw extracted structure instead of a summary. |
+| `--library <name>` | On `search`, restrict results to one source library (`aceternity`, `magicui`, `cult-ui`, `reactbits`, `21st.dev`, `shadcn`, `tremor`, or a port library such as `vue-bits`, `inspira-ui`, `svelte-bits`). |
+| `--framework <fw>` | On `search`, which port to search: `react` (default), `vue`, or `svelte`. Composes with `--library`. |
+| `--json` | On `search` and `tokens`, print machine-readable JSON instead of a summary. |
 | `-v`, `--version` | Print the version. |
 
 ## `search`: find a showpiece before you install
@@ -50,6 +51,16 @@ $ npx components-skill@latest search card --library cult-ui
 ```
 
 Every query term must match (name, alias, effect, or library); exits `1` with no results.
+
+`--framework vue` or `--framework svelte` searches the ports instead. Only showpieces that carry that variant come back, reported with the port's library and `ref`; plain fallbacks are React only. `--library` applies after that, so the two compose:
+
+```
+$ npx components-skill@latest search text --framework vue --library vue-bits
+  blur-text          [showpiece/vue-bits vue] words blur-fade into focus sequentially
+      aliases: blur fade-in text, text unblur reveal
+```
+
+`--json` prints an array an agent can read without scraping the table. Each row has `id` (the registry name), `kind`, `framework`, `library`, `ref`, `fetch`, `effect`, `aliases`, `license`, and `deps`. No matches prints `[]` and exits `1`.
 
 ### Where things land
 

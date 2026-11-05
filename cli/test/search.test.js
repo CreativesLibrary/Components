@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { search, formatResults } from "../src/commands/search.js";
+import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { search, formatResults, toJson, knownFrameworks } from "../src/commands/search.js";
+
+const BIN = join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "components-skill.js");
+const cli = (...args) => spawnSync(process.execPath, [BIN, ...args], { encoding: "utf8" });
 
 // These run against the real dist/ bundle (built via `npm run build` before
 // `npm test`, same as add.test.js relies on for its file checks), so they
@@ -74,5 +81,83 @@ describe("formatResults", () => {
     assert.match(out, /macbook-scroll/);
     assert.match(out, /\[showpiece\/aceternity\]/);
     assert.match(out, /aliases:/);
+  });
+});
+
+describe("search --framework", () => {
+  it("knows react plus every framework the registry carries", () => {
+    const fws = knownFrameworks();
+    assert.ok(fws.includes("react"));
+    assert.ok(fws.includes("vue"));
+    assert.ok(fws.includes("svelte"));
+  });
+
+  it("defaults to react and tags every result with it", () => {
+    const results = search("text");
+    assert.ok(results.length > 0);
+    assert.ok(results.every((r) => r.framework === "react"));
+  });
+
+  it("returns only entries that carry the variant, with the variant's library and ref", () => {
+    const results = search("text", { framework: "svelte" });
+    assert.ok(results.length > 0);
+    for (const r of results) {
+      assert.equal(r.framework, "svelte");
+      assert.equal(r.library, "svelte-bits");
+      assert.match(r.ref, /sveltebits\.xyz/);
+      assert.equal(r.reactLibrary, "reactbits");
+    }
+  });
+
+  it("drops fallbacks outside react", () => {
+    assert.ok(search("button").some((r) => r.kind === "fallback"));
+    assert.ok(search("button", { framework: "vue" }).every((r) => r.kind !== "fallback"));
+  });
+
+  it("composes with --library after the projection", () => {
+    const inspira = search("card", { framework: "vue", library: "inspira-ui" });
+    assert.ok(inspira.length > 0);
+    assert.ok(inspira.every((r) => r.library === "inspira-ui" && r.framework === "vue"));
+
+    // The React library name no longer matches once projected onto vue.
+    assert.equal(search("card", { framework: "vue", library: "aceternity" }).length, 0);
+  });
+
+  it("is case-insensitive and rejects an unknown framework", () => {
+    assert.ok(search("text", { framework: "Vue" }).length > 0);
+    assert.throws(() => search("text", { framework: "elm" }), /Unknown framework 'elm'/);
+  });
+});
+
+describe("search --json", () => {
+  it("maps results to id, library, ref, framework", () => {
+    const [first] = toJson(search("macbook-scroll"));
+    assert.equal(first.id, "macbook-scroll");
+    assert.equal(first.library, "aceternity");
+    assert.equal(first.framework, "react");
+    assert.match(first.ref, /^npx shadcn@latest add /);
+    assert.equal(first.kind, "showpiece");
+  });
+
+  it("prints a parseable array from the CLI", () => {
+    const r = cli("search", "beams", "--json");
+    assert.equal(r.status, 0, r.stderr);
+    const out = JSON.parse(r.stdout);
+    assert.ok(Array.isArray(out) && out.length > 0);
+    for (const row of out) {
+      for (const key of ["id", "library", "ref", "framework"]) assert.ok(row[key], `${key} present`);
+    }
+  });
+
+  it("prints [] and exits 1 when nothing matches", () => {
+    const r = cli("search", "zzz_no_such_thing_zzz", "--json");
+    assert.equal(r.status, 1);
+    assert.deepEqual(JSON.parse(r.stdout), []);
+  });
+
+  it("carries --framework through", () => {
+    const r = cli("search", "text", "--framework", "vue", "--json");
+    const out = JSON.parse(r.stdout);
+    assert.ok(out.length > 0 && out.every((row) => row.framework === "vue"));
   });
 });

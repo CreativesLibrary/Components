@@ -2,7 +2,7 @@
 import { resolve } from "node:path";
 import { add } from "../src/commands/add.js";
 import { update } from "../src/commands/update.js";
-import { search, formatResults } from "../src/commands/search.js";
+import { search, formatResults, toJson } from "../src/commands/search.js";
 import { extractTokens, formatTokens } from "../src/commands/tokens.js";
 import { packageVersion } from "../src/lib/dist.js";
 import { AGENTS } from "../src/lib/layout.js";
@@ -20,7 +20,8 @@ Options:
   --global          install into your user config dir instead of this project
   --force           update: overwrite files you have edited locally
   --library <name>  search: restrict to one source library
-  --json            tokens: print the raw extracted structure instead of a summary
+  --framework <fw>  search: react | vue | svelte (default react); composes with --library
+  --json            search, tokens: print machine-readable JSON instead of a summary
   -h, --help        show this
   -v, --version     print the version
 
@@ -32,6 +33,7 @@ Examples:
   npx components-skill@latest update                  # refresh, keeping local edits
   npx components-skill@latest search "laptop opening" # find a showpiece by effect/alias
   npx components-skill@latest search card --library cult-ui
+  npx components-skill@latest search text --framework svelte --json
   npx components-skill@latest tokens                  # read this project's brand tokens
   npx components-skill@latest tokens ../other-app --json
 `;
@@ -58,6 +60,10 @@ function parse(argv) {
       opts.library = argv[++i];
       if (!opts.library || opts.library.startsWith("-")) throw new Error("--library needs a value");
     } else if (a.startsWith("--library=")) opts.library = a.slice("--library=".length);
+    else if (a === "--framework") {
+      opts.framework = argv[++i];
+      if (!opts.framework || opts.framework.startsWith("-")) throw new Error("--framework needs a value");
+    } else if (a.startsWith("--framework=")) opts.framework = a.slice("--framework=".length);
     else if (a.startsWith("-")) throw new Error(`Unknown flag: ${a}`);
     else opts._.push(a);
   }
@@ -99,7 +105,7 @@ function main(argv) {
     if (cmd === "search") {
       const query = opts._.slice(1).join(" ");
       const results = search(query, opts);
-      console.log(formatResults(results));
+      console.log(opts.json ? JSON.stringify(toJson(results), null, 2) : formatResults(results));
       return results.length ? 0 : 1;
     }
     if (cmd === "tokens") {

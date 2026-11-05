@@ -37,9 +37,44 @@ function matchScore(entry, terms) {
 }
 
 /**
+ * Project an entry onto one framework. React is the top-level entry itself;
+ * any other framework swaps in that variant's fetch/license surface and keeps
+ * the parent's name, aliases, and effect, the same inheritance validate.py
+ * documents for `frameworks.<name>`.
+ */
+function forFramework(entry, framework) {
+  if (framework === "react") return { ...entry, framework: "react" };
+  const v = entry.frameworks?.[framework];
+  if (!v) return null;
+  return {
+    ...entry,
+    library: v.library,
+    ref: v.ref,
+    fetch: v.fetch,
+    license: v.license,
+    deps: v.deps,
+    framework,
+    reactLibrary: entry.library,
+  };
+}
+
+/** Every framework the registry carries: React, plus each `frameworks` key in use. */
+export function knownFrameworks(data = loadRegistry()) {
+  const out = new Set(["react"]);
+  for (const e of data.showpiece || []) for (const fw of Object.keys(e.frameworks || {})) out.add(fw);
+  return [...out];
+}
+
+/**
  * Search showpiece + fallback entries by name, alias, effect, or library.
  * Returns entries sorted best-match first, each tagged with `kind` so callers
- * can tell a live-fetched showpiece from a plain fallback.
+ * can tell a live-fetched showpiece from a plain fallback, and `framework`.
+ *
+ * `opts.framework` picks which port to search (default react). A non-React
+ * framework only returns showpieces that carry that variant, reporting the
+ * variant's library and ref; fallbacks are shadcn React only. `opts.library`
+ * is applied after that projection, so the two compose:
+ * `--framework vue --library inspira-ui` means Inspira UI's Vue ports.
  */
 export function search(query, opts = {}) {
   const q = (query || "").trim().toLowerCase();
@@ -47,8 +82,20 @@ export function search(query, opts = {}) {
   const terms = q.split(/\s+/).filter(Boolean);
 
   const data = loadRegistry();
-  const showpiece = (data.showpiece || []).map((e) => ({ ...e, kind: "showpiece" }));
-  const fallback = (data.fallback_basic?.components || []).map((e) => ({ ...e, kind: "fallback" }));
+  const framework = (opts.framework || "react").toLowerCase();
+  const frameworks = knownFrameworks(data);
+  if (!frameworks.includes(framework)) {
+    throw new Error(`Unknown framework '${opts.framework}'. Expected one of: ${frameworks.join(", ")}`);
+  }
+
+  const showpiece = (data.showpiece || [])
+    .map((e) => forFramework(e, framework))
+    .filter(Boolean)
+    .map((e) => ({ ...e, kind: "showpiece" }));
+  const fallback =
+    framework === "react"
+      ? (data.fallback_basic?.components || []).map((e) => ({ ...e, kind: "fallback", framework: "react" }))
+      : [];
   let pool = [...showpiece, ...fallback];
 
   if (opts.library) {
@@ -63,13 +110,34 @@ export function search(query, opts = {}) {
     .map((r) => r.entry);
 }
 
+/**
+ * The machine-readable form of a result list, for agents (`search --json`).
+ * `id` is the entry's registry name, the same key `components.json`,
+ * the gallery's `#showpiece-<id>` anchors, and smoke-test.mjs --only use.
+ */
+export function toJson(results) {
+  return results.map((e) => ({
+    id: e.name,
+    kind: e.kind,
+    framework: e.framework,
+    library: e.library,
+    ref: e.ref,
+    fetch: e.fetch ?? null,
+    effect: e.effect ?? null,
+    aliases: e.aliases ?? [],
+    license: e.license ?? null,
+    deps: e.deps ?? [],
+  }));
+}
+
 export function formatResults(results) {
   if (results.length === 0) {
-    return "No matches. Try a shorter query, or drop --library to widen the search.";
+    return "No matches. Try a shorter query, or drop --library / --framework to widen the search.";
   }
   return results
     .map((e) => {
-      const tag = `[${e.kind}/${e.library}]`;
+      const fw = e.framework && e.framework !== "react" ? ` ${e.framework}` : "";
+      const tag = `[${e.kind}/${e.library}${fw}]`;
       const line = `  ${e.name.padEnd(18)} ${tag.padEnd(20)} ${e.effect || ""}`.trimEnd();
       const aliases = (e.aliases || []).slice(0, 3).join(", ");
       return aliases ? `${line}\n      aliases: ${aliases}` : line;
