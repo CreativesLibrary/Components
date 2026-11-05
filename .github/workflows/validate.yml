@@ -5,11 +5,15 @@ on:
     paths:
       - "components.json"
       - "scripts/validate.py"
+      - "scripts/test_validate.py"
+      - "scripts/_registry.py"
       - ".github/workflows/validate.yml"
   pull_request:
     paths:
       - "components.json"
       - "scripts/validate.py"
+      - "scripts/test_validate.py"
+      - "scripts/_registry.py"
   workflow_dispatch:
   schedule:
     # Quarterly sanity check (1st of Jan/Apr/Jul/Oct, 06:00 UTC).
@@ -24,3 +28,5 @@ jobs:
       - name: Validate JSON + required fields
         # Same script contributors run locally, so CI cannot disagree with them.
         run: python3 scripts/validate.py
+      - name: Test the validator itself
+        run: python3 -m unittest discover -s scripts -p "test_*.py" -v
