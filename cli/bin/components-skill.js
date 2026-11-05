@@ -4,6 +4,7 @@ import { add } from "../src/commands/add.js";
 import { update } from "../src/commands/update.js";
 import { search, formatResults, toJson } from "../src/commands/search.js";
 import { extractTokens, formatTokens } from "../src/commands/tokens.js";
+import { list, formatList } from "../src/commands/list.js";
 import { packageVersion } from "../src/lib/dist.js";
 import { AGENTS } from "../src/lib/layout.js";
 
@@ -12,17 +13,18 @@ const USAGE = `components-skill - install the \`components\` skill into your age
 Usage:
   npx components-skill@latest add [options]
   npx components-skill@latest update [options]
+  npx components-skill@latest list [options]
   npx components-skill@latest search <query> [options]
   npx components-skill@latest tokens [path] [options]
 
 Options:
-  --agent <name>    ${AGENTS.join(" | ")} | all      (default: claude, add/update only)
-  --global          install into your user config dir instead of this project
+  --agent <name>    ${AGENTS.join(" | ")} | all      (default: claude for add/update, every agent for list)
+  --global          install into your user config dir instead of this project (list: global only)
   --force           update: overwrite files you have edited locally
   --dry-run         add: print every file that would be written, and where; write nothing
   --library <name>  search: restrict to one source library
   --framework <fw>  search: react | vue | svelte (default react); composes with --library
-  --json            search, tokens: print machine-readable JSON instead of a summary
+  --json            search, tokens, list: print machine-readable JSON instead of a summary
   -h, --help        show this
   -v, --version     print the version
 
@@ -33,6 +35,7 @@ Examples:
   npx components-skill@latest add --global            # ~/.claude/skills/components
   npx components-skill@latest add --agent all --dry-run   # show what would land where
   npx components-skill@latest update                  # refresh, keeping local edits
+  npx components-skill@latest list                    # what is installed where, and is it current
   npx components-skill@latest search "laptop opening" # find a showpiece by effect/alias
   npx components-skill@latest search card --library cult-ui
   npx components-skill@latest search text --framework svelte --json
@@ -103,6 +106,11 @@ function main(argv) {
     if (cmd === "update") {
       console.log(`Updating components skill...`);
       update(opts);
+      return 0;
+    }
+    if (cmd === "list") {
+      const result = list(opts);
+      console.log(opts.json ? JSON.stringify(result, null, 2) : formatList(result));
       return 0;
     }
     if (cmd === "search") {

@@ -21,6 +21,7 @@ npx components-skill@latest add --agent cursor   # just Cursor
 npx components-skill@latest add --global         # ~/.claude/skills/components
 npx components-skill@latest add --dry-run        # list what would be written, write nothing
 npx components-skill@latest update               # refresh, keeping your edits
+npx components-skill@latest list                 # what is installed where, and whether it is current
 npx components-skill@latest search "laptop opening"   # find a showpiece before installing
 npx components-skill@latest tokens                    # read this project's brand tokens
 ```
@@ -29,13 +30,13 @@ npx components-skill@latest tokens                    # read this project's bran
 
 | Flag | Meaning |
 |------|---------|
-| `--agent <name>` | `claude` \| `codex` \| `cursor` \| `gemini` \| `all`. Default `claude`. Comma-separated lists work too. `add`/`update` only. |
+| `--agent <name>` | `claude` \| `codex` \| `cursor` \| `gemini` \| `all`. Default `claude`. Comma-separated lists work too. `add`/`update`/`list` (where `list` defaults to every agent). |
 | `--global` | Install into your user config dir instead of the current project. Not supported for Cursor, which has no documented user-level rules directory. |
 | `--force` | On `update`, overwrite files you have edited locally. |
 | `--dry-run` | On `add`, print every file that would be written and the install root it goes under, plus the manifest. Creates no directories and writes no files. |
 | `--library <name>` | On `search`, restrict results to one source library (`aceternity`, `magicui`, `cult-ui`, `reactbits`, `21st.dev`, `shadcn`, `tremor`, or a port library such as `vue-bits`, `inspira-ui`, `svelte-bits`). |
 | `--framework <fw>` | On `search`, which port to search: `react` (default), `vue`, or `svelte`. Composes with `--library`. |
-| `--json` | On `search` and `tokens`, print machine-readable JSON instead of a summary. |
+| `--json` | On `search`, `tokens`, and `list`, print machine-readable JSON instead of a summary. |
 | `-v`, `--version` | Print the version. |
 
 ## `search`: find a showpiece before you install
@@ -91,6 +92,29 @@ Updating components skill...
 ```
 
 Deleted files are restored. `--force` overwrites everything.
+
+## `list`: what is installed, and is it current
+
+`list` reads the same manifest `update` does, for every agent, in this project and in your user config dir:
+
+```
+$ npx components-skill@latest list
+components-skill v1.2.0
+
+Project (/path/to/project):
+  Claude Code  v1.1.1    outdated (run `components-skill update`)
+      .claude/skills/components
+      1 file(s) edited locally, kept by update
+  Codex CLI    -         not installed
+  ...
+
+Global (user config dir):
+  Claude Code  v1.2.0    up to date
+      /home/you/.claude/skills/components
+  Cursor       -         unsupported (no user-level location for this agent)
+```
+
+`not installed` means no manifest entry for that agent at that root. `outdated` means an older CLI installed it and `update` would refresh it. Edited and missing files are counted with the same checksum comparison `update` uses. `--global` limits it to the user config dir, `--agent` to named agents, and `--json` prints the rows.
 
 ## `tokens`: read the target project's brand tokens
 
