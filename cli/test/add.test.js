@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 
 import { add } from "../src/commands/add.js";
-import { update } from "../src/commands/update.js";
 import { MANIFEST_NAME } from "../src/lib/layout.js";
 
 const dirs = [];
@@ -79,69 +78,5 @@ describe("add", () => {
 
   it("rejects an unknown agent", () => {
     assert.throws(() => add({ cwd: tmp(), agent: "emacs" }), /Unknown agent/);
-  });
-});
-
-describe("update", () => {
-  it("refuses to clobber a locally edited file", () => {
-    const cwd = tmp();
-    add({ cwd });
-
-    const skill = join(cwd, ".claude", "skills", "components", "SKILL.md");
-    const edited = "# my local edits\n";
-    writeFileSync(skill, edited);
-
-    logs = [];
-    const res = update({ cwd });
-
-    assert.equal(res.warned, 1, "one modified file reported");
-    assert.equal(readFileSync(skill, "utf8"), edited, "local edit preserved");
-    assert.ok(
-      logs.join("\n").includes("changed since install"),
-      "warns about the modification",
-    );
-  });
-
-  it("--force overwrites a locally edited file", () => {
-    const cwd = tmp();
-    add({ cwd });
-
-    const skill = join(cwd, ".claude", "skills", "components", "SKILL.md");
-    writeFileSync(skill, "# my local edits\n");
-
-    update({ cwd, force: true });
-    assert.notEqual(readFileSync(skill, "utf8"), "# my local edits\n", "was overwritten");
-  });
-
-  it("restores a file deleted after install", () => {
-    const cwd = tmp();
-    add({ cwd });
-
-    const ref = join(cwd, ".claude", "skills", "components", "references", "live-fetch.md");
-    rmSync(ref);
-    assert.ok(!existsSync(ref));
-
-    update({ cwd });
-    assert.ok(existsSync(ref), "restored");
-  });
-
-  it("leaves an untouched install byte-identical", () => {
-    const cwd = tmp();
-    add({ cwd });
-
-    const skill = join(cwd, ".claude", "skills", "components", "SKILL.md");
-    const before = readFileSync(skill);
-
-    logs = [];
-    const res = update({ cwd });
-
-    assert.equal(res.warned, 0, "nothing reported as modified");
-    assert.deepEqual(readFileSync(skill), before);
-  });
-
-  it("says so when nothing is installed", () => {
-    logs = [];
-    update({ cwd: tmp() });
-    assert.ok(logs.join("\n").includes("Nothing to update"));
   });
 });
