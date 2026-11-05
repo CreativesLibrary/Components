@@ -49,8 +49,12 @@ No component source code lives here. The repo stores pointers, and the real code
   `validate.py` fails the build if `ref` is not the exact rendering of `fetch`, so
   the two cannot drift.
 - **`fetch.method` must be one of `fetch_methods`' keys** (`registry_cli`,
-  `webfetch`, `playwright`), and `fetch.url` must be `https`. `fetch.cli` is
-  required for `registry_cli` and rejected otherwise.
+  `registry_item`, `webfetch`, `playwright`), and `fetch.url` must be `https`.
+  `fetch.cli` is required for `registry_cli` and rejected otherwise.
+- **`registry_item` is for a registry whose JSON is sound but whose files no CLI
+  places correctly** (Svelte Bits, #66). Its `ref` must be exactly
+  `fetch registry item "<url>", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]`;
+  `validate.py` enforces that, as it does the command form for `registry_cli`.
 - **`fetch` applies to `showpiece[]` and its `frameworks.*` variants only.**
   `fallback_basic` refs are shadcn shorthand or prose compose instructions with no
   URL, and nothing fetches or executes them.

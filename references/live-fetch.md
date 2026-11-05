@@ -93,6 +93,22 @@ full registry URLs over namespaced shorthand). So:
 | User wants something from the wider 21st.dev catalogue, and already has a key | The `@21st` namespace above. Confirm they have a key before suggesting it. |
 | User has no 21st.dev account | Do not send them to sign up. Match the effect to another library instead. |
 
+### 1c. Registry item JSON, placed by hand (`registry_item`)
+
+Every Svelte Bits variant (`frameworks.svelte`) uses this. Its registry JSON is fine, but every CLI tried puts the file in the wrong place, because the items' `target` paths start with SvelteKit's `$lib/` alias ([#66](https://github.com/AnayDhawan/Components/issues/66)):
+
+- `npx shadcn@latest add <url>` writes a literal `src/$lib/...` directory.
+- `npx shadcn-svelte@latest add <url>` nests it: `src/lib/components/$lib/components/...`.
+- `npx jsrepo add` writes `./$lib/...` at the project root, with or without a `paths` mapping.
+
+So do the placement yourself:
+
+1. GET `fetch.url`. It is a shadcn registry-item JSON.
+2. For each `files[]` entry, write `content` to `target`, replacing a leading `$lib/` with `src/lib/`. Import the placed file through the project's own alias: `#lib/...` on current SvelteKit, which removed `$lib` and fails the build on it, or `$lib/...` on older versions. A relative path works on both.
+3. Install the item's `dependencies[]` plus the entry's `deps`.
+
+`scripts/smoke-test.mjs --framework svelte --all-variants` runs these exact steps in CI and builds the result.
+
 ## 2. WebFetch the component page (fallback)
 
 When there's no registry, or you only need to read code:

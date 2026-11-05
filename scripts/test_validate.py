@@ -78,6 +78,34 @@ class ValidateTests(unittest.TestCase):
         del variant["license"]
         self.assertIn(f"{entry['name']}.frameworks.{fw}: license missing", validate(data))
 
+    def _svelte_variant(self, data):
+        entry = next(e for e in data["showpiece"] if (e.get("frameworks") or {}).get("svelte"))
+        return entry, entry["frameworks"]["svelte"]
+
+    def test_svelte_variants_use_registry_item(self):
+        data = registry()
+        variants = [e["frameworks"]["svelte"] for e in data["showpiece"] if (e.get("frameworks") or {}).get("svelte")]
+        self.assertTrue(variants)
+        self.assertTrue(all(v["fetch"]["method"] == "registry_item" for v in variants))
+
+    def test_registry_item_ref_must_match_fetch(self):
+        data = registry()
+        entry, variant = self._svelte_variant(data)
+        variant["ref"] = 'npx shadcn@latest add "%s"' % variant["fetch"]["url"]
+        errors = validate(data)
+        self.assertTrue(
+            any(e.startswith(f"{entry['name']}.frameworks.svelte: ref does not match fetch") for e in errors), errors
+        )
+
+    def test_registry_item_rejects_cli(self):
+        data = registry()
+        entry, variant = self._svelte_variant(data)
+        variant["fetch"]["cli"] = "shadcn"
+        self.assertIn(
+            f"{entry['name']}.frameworks.svelte: fetch.cli is only meaningful for method 'registry_cli'",
+            validate(data),
+        )
+
     def test_placeholder_license_fails(self):
         data = registry()
         data["showpiece"][0]["license"] = "TBD"

@@ -34,7 +34,7 @@ LICENSE_PLACEHOLDERS = {"", "tbd", "todo", "verify", "unknown", "n/a", "none", "
 # ref" for anyone writing a fourth consumer, which is the footgun #47 is about.
 # With `fetch` present, the obvious move is reading two fields, and the checks
 # below guarantee the string can never disagree with them.
-FETCH_METHODS = {"registry_cli", "webfetch", "playwright"}
+FETCH_METHODS = {"registry_cli", "registry_item", "webfetch", "playwright"}
 # Only these CLIs may appear in fetch.cli. Consumers map them to a project setup,
 # so an unknown one is a data error, not something to accommodate at runtime.
 KNOWN_CLIS = {"shadcn", "shadcn-vue"}
@@ -43,6 +43,18 @@ KNOWN_CLIS = {"shadcn", "shadcn-vue"}
 def canonical_ref(fetch):
     """The one `ref` string a registry_cli fetch is allowed to have."""
     return 'npx %s@latest add "%s"' % (fetch.get("cli"), fetch.get("url"))
+
+
+def canonical_item_ref(fetch):
+    """The one `ref` string a registry_item fetch is allowed to have.
+
+    registry_item exists because no CLI places these files correctly (#66), so
+    its ref spells out the placement instead of naming a command to run.
+    """
+    return (
+        'fetch registry item "%s", write each files[].content to its target '
+        "with $lib/ as src/lib/, install dependencies[]" % fetch.get("url")
+    )
 
 
 def check_fetch(label, entry, errors):
@@ -79,6 +91,14 @@ def check_fetch(label, entry, errors):
             errors.append(
                 f"{label}: ref does not match fetch. "
                 f"ref is {ref.strip()!r}, fetch renders to {canonical_ref(fetch)!r}"
+            )
+    elif method == "registry_item":
+        if "cli" in fetch:
+            errors.append(f"{label}: fetch.cli is only meaningful for method 'registry_cli'")
+        elif ref.strip() != canonical_item_ref(fetch):
+            errors.append(
+                f"{label}: ref does not match fetch. "
+                f"ref is {ref.strip()!r}, fetch renders to {canonical_item_ref(fetch)!r}"
             )
     else:
         if "cli" in fetch:

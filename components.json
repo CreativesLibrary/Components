@@ -34,6 +34,11 @@
       "when": "No registry command available, or you only need to read the code.",
       "limit": "Galleries + JS-heavy pages may not expose code cleanly to WebFetch."
     },
+    "registry_item": {
+      "how": "GET `fetch.url` (a shadcn registry-item JSON). Write each `files[].content` to its `target`, resolving a leading `$lib/` to `src/lib/` (SvelteKit's alias). Then install `dependencies[]` and the entry's `deps`.",
+      "when": "The registry's JSON is sound but no CLI places its files correctly. Today: every Svelte Bits variant. `npx shadcn` writes a literal `src/$lib/` dir, `npx shadcn-svelte` nests it under `src/lib/components/$lib/`, and `npx jsrepo` writes `./$lib/` at the project root (#66).",
+      "safety": "Same as registry_cli: this writes code into the project. Show the user the URL and the target paths before writing."
+    },
     "playwright": {
       "how": "Use the playwright skill to open the page and read the rendered code panel / copy button content.",
       "when": "WebFetch misses code behind tabs/JS. Heavier; use only when needed."
@@ -375,8 +380,8 @@
         },
         "svelte": {
           "library": "svelte-bits",
-          "fetch": { "method": "registry_cli", "cli": "shadcn", "url": "https://sveltebits.xyz/r/split-text.json" },
-          "ref": "npx shadcn@latest add \"https://sveltebits.xyz/r/split-text.json\"",
+          "fetch": { "method": "registry_item", "url": "https://sveltebits.xyz/r/split-text.json" },
+          "ref": "fetch registry item \"https://sveltebits.xyz/r/split-text.json\", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]",
           "license": "MIT + Commons Clause",
           "deps": ["gsap"]
         }
@@ -401,8 +406,8 @@
         },
         "svelte": {
           "library": "svelte-bits",
-          "fetch": { "method": "registry_cli", "cli": "shadcn", "url": "https://sveltebits.xyz/r/blur-text.json" },
-          "ref": "npx shadcn@latest add \"https://sveltebits.xyz/r/blur-text.json\"",
+          "fetch": { "method": "registry_item", "url": "https://sveltebits.xyz/r/blur-text.json" },
+          "ref": "fetch registry item \"https://sveltebits.xyz/r/blur-text.json\", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]",
           "license": "MIT + Commons Clause",
           "deps": ["motion"]
         }
@@ -426,8 +431,8 @@
         },
         "svelte": {
           "library": "svelte-bits",
-          "fetch": { "method": "registry_cli", "cli": "shadcn", "url": "https://sveltebits.xyz/r/decrypted-text.json" },
-          "ref": "npx shadcn@latest add \"https://sveltebits.xyz/r/decrypted-text.json\"",
+          "fetch": { "method": "registry_item", "url": "https://sveltebits.xyz/r/decrypted-text.json" },
+          "ref": "fetch registry item \"https://sveltebits.xyz/r/decrypted-text.json\", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]",
           "license": "MIT + Commons Clause"
         }
       }
@@ -450,8 +455,8 @@
         },
         "svelte": {
           "library": "svelte-bits",
-          "fetch": { "method": "registry_cli", "cli": "shadcn", "url": "https://sveltebits.xyz/r/count-up.json" },
-          "ref": "npx shadcn@latest add \"https://sveltebits.xyz/r/count-up.json\"",
+          "fetch": { "method": "registry_item", "url": "https://sveltebits.xyz/r/count-up.json" },
+          "ref": "fetch registry item \"https://sveltebits.xyz/r/count-up.json\", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]",
           "license": "MIT + Commons Clause",
           "deps": ["motion"]
         }
@@ -476,8 +481,8 @@
         },
         "svelte": {
           "library": "svelte-bits",
-          "fetch": { "method": "registry_cli", "cli": "shadcn", "url": "https://sveltebits.xyz/r/aurora.json" },
-          "ref": "npx shadcn@latest add \"https://sveltebits.xyz/r/aurora.json\"",
+          "fetch": { "method": "registry_item", "url": "https://sveltebits.xyz/r/aurora.json" },
+          "ref": "fetch registry item \"https://sveltebits.xyz/r/aurora.json\", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]",
           "license": "MIT + Commons Clause",
           "deps": ["ogl"]
         }
@@ -502,8 +507,8 @@
         },
         "svelte": {
           "library": "svelte-bits",
-          "fetch": { "method": "registry_cli", "cli": "shadcn", "url": "https://sveltebits.xyz/r/particles.json" },
-          "ref": "npx shadcn@latest add \"https://sveltebits.xyz/r/particles.json\"",
+          "fetch": { "method": "registry_item", "url": "https://sveltebits.xyz/r/particles.json" },
+          "ref": "fetch registry item \"https://sveltebits.xyz/r/particles.json\", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]",
           "license": "MIT + Commons Clause",
           "deps": ["ogl"]
         }
@@ -528,8 +533,8 @@
         },
         "svelte": {
           "library": "svelte-bits",
-          "fetch": { "method": "registry_cli", "cli": "shadcn", "url": "https://sveltebits.xyz/r/hyperspeed.json" },
-          "ref": "npx shadcn@latest add \"https://sveltebits.xyz/r/hyperspeed.json\"",
+          "fetch": { "method": "registry_item", "url": "https://sveltebits.xyz/r/hyperspeed.json" },
+          "ref": "fetch registry item \"https://sveltebits.xyz/r/hyperspeed.json\", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]",
           "license": "MIT + Commons Clause",
           "deps": ["three", "postprocessing"]
         }
@@ -553,8 +558,8 @@
         },
         "svelte": {
           "library": "svelte-bits",
-          "fetch": { "method": "registry_cli", "cli": "shadcn", "url": "https://sveltebits.xyz/r/letter-glitch.json" },
-          "ref": "npx shadcn@latest add \"https://sveltebits.xyz/r/letter-glitch.json\"",
+          "fetch": { "method": "registry_item", "url": "https://sveltebits.xyz/r/letter-glitch.json" },
+          "ref": "fetch registry item \"https://sveltebits.xyz/r/letter-glitch.json\", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]",
           "license": "MIT + Commons Clause"
         }
       }
@@ -577,8 +582,8 @@
         },
         "svelte": {
           "library": "svelte-bits",
-          "fetch": { "method": "registry_cli", "cli": "shadcn", "url": "https://sveltebits.xyz/r/splash-cursor.json" },
-          "ref": "npx shadcn@latest add \"https://sveltebits.xyz/r/splash-cursor.json\"",
+          "fetch": { "method": "registry_item", "url": "https://sveltebits.xyz/r/splash-cursor.json" },
+          "ref": "fetch registry item \"https://sveltebits.xyz/r/splash-cursor.json\", write each files[].content to its target with $lib/ as src/lib/, install dependencies[]",
           "license": "MIT + Commons Clause"
         }
       }
