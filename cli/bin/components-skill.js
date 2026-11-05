@@ -105,6 +105,9 @@ function main(argv) {
     if (cmd === "tokens") {
       const projectDir = opts._[1] ? resolve(opts._[1]) : process.cwd();
       const result = extractTokens(projectDir);
+      // --json output is for machines, so its warnings go to stderr, where a
+      // person still sees them and stdout stays one parseable document.
+      if (opts.json) for (const w of result.warnings) console.error(`warning: ${w}`);
       console.log(opts.json ? JSON.stringify(result, null, 2) : formatTokens(result));
       return result.cssFile || result.configFile ? 0 : 1;
     }

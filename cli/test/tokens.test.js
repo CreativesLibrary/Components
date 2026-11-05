@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { after, describe, it } from "node:test";
 
 import { extractTokens, formatTokens, KNOWN_ADAPTATION_TOKENS } from "../src/commands/tokens.js";
@@ -146,6 +148,62 @@ describe("extractTokens", () => {
     write(dir, "tailwind.config.js", `module.exports = { theme: { extend: { colors: someFunction() } } };\n`);
     const result = extractTokens(dir);
     assert.equal(result.tailwindConfigColors, null);
+  });
+
+  it("warns, naming the file, when the config has no readable colors block", () => {
+    const dir = tmp();
+    write(dir, "tailwind.config.js", `module.exports = { theme: { extend: { colors: someFunction() } } };\n`);
+    const { warnings } = extractTokens(dir);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /tailwind\.config\.js has no colors block/);
+  });
+
+  it("warns when a colors block exists but every value in it is computed", () => {
+    const dir = tmp();
+    write(
+      dir,
+      "tailwind.config.ts",
+      `import brand from "./brand";\nexport default { theme: { extend: { colors: { primary: brand.primary, accent: brand.accent } } } };\n`,
+    );
+    const { warnings, tailwindConfigColors } = extractTokens(dir);
+    assert.equal(tailwindConfigColors, null);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /tailwind\.config\.ts has a colors block, but no value in it could be read/);
+  });
+
+  it("warns instead of throwing when the config cannot be read at all", () => {
+    const dir = tmp();
+    mkdirSync(join(dir, "tailwind.config.js")); // a directory: readFileSync fails with EISDIR
+    const result = extractTokens(dir);
+    assert.equal(result.tailwindConfigColors, null);
+    assert.match(result.warnings[0], /could not read tailwind\.config\.js/);
+  });
+
+  it("has no warnings for a config it reads cleanly", () => {
+    const dir = tmp();
+    write(dir, "tailwind.config.js", `module.exports = { theme: { extend: { colors: { primary: "#111" } } } };\n`);
+    assert.deepEqual(extractTokens(dir).warnings, []);
+  });
+});
+
+describe("tokens command", () => {
+  const BIN = join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "components-skill.js");
+
+  it("prints the warning and exits 0 on an unreadable config", () => {
+    const dir = tmp();
+    write(dir, "tailwind.config.js", `module.exports = { theme: { extend: { colors: someFunction() } } };\n`);
+    const r = spawnSync(process.execPath, [BIN, "tokens", dir], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /warning: tailwind\.config\.js has no colors block/);
+  });
+
+  it("keeps --json stdout parseable and sends the warning to stderr", () => {
+    const dir = tmp();
+    write(dir, "tailwind.config.js", `module.exports = { theme: { extend: { colors: someFunction() } } };\n`);
+    const r = spawnSync(process.execPath, [BIN, "tokens", dir, "--json"], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(JSON.parse(r.stdout).warnings.length, 1);
+    assert.match(r.stderr, /warning: tailwind\.config\.js/);
   });
 });
 

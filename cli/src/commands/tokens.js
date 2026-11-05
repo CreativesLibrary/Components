@@ -263,8 +263,35 @@ export function extractTokens(projectDir) {
     }
   }
 
+  // The config read is a regex over source text, not an evaluation, so a
+  // config it cannot read is reported by name instead of coming back as an
+  // empty set that looks like "this project defines no colors".
+  const warnings = [];
   const configPath = findTailwindConfig(projectDir);
-  const tailwindConfigColors = configPath ? extractTailwindConfigColors(readFileSync(configPath, "utf8")) : null;
+  let tailwindConfigColors = null;
+  if (configPath) {
+    const configName = relative(projectDir, configPath);
+    let source = null;
+    try {
+      source = readFileSync(configPath, "utf8");
+    } catch (e) {
+      warnings.push(`could not read ${configName} (${e.code || e.message}); its colors are not included`);
+    }
+    if (source !== null) {
+      tailwindConfigColors = extractTailwindConfigColors(source);
+      if (!tailwindConfigColors) {
+        const hasColors = /colors\s*:\s*{/.test(source);
+        warnings.push(
+          hasColors
+            ? `${configName} has a colors block, but no value in it could be read. This is a best-effort ` +
+                `read: string literals and one level of nesting only, no imports, spreads, functions, or ` +
+                `computed values. Its colors are not included.`
+            : `${configName} has no colors block this best-effort read recognises (string literals and one ` +
+                `level of nesting under theme.colors / theme.extend.colors). Its colors are not included.`,
+        );
+      }
+    }
+  }
 
   const knownTokens = {};
   const missingKnownTokens = [];
@@ -284,6 +311,7 @@ export function extractTokens(projectDir) {
     tailwindConfigColors,
     knownTokens,
     missingKnownTokens,
+    warnings,
   };
 }
 
@@ -299,6 +327,7 @@ export function formatTokens(result) {
     lines.push("Token source: none found");
   }
   lines.push(`Dark mode: ${result.darkModeStrategy ?? "not detected"}`);
+  for (const w of result.warnings ?? []) lines.push(`warning: ${w}`);
   lines.push("");
   lines.push("Known adaptation tokens (references/adaptation.md § 1):");
   for (const name of KNOWN_ADAPTATION_TOKENS) {
