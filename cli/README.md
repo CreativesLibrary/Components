@@ -19,6 +19,7 @@ npx components-skill@latest add                  # Claude Code, this project
 npx components-skill@latest add --agent all      # every supported agent
 npx components-skill@latest add --agent cursor   # just Cursor
 npx components-skill@latest add --global         # ~/.claude/skills/components
+npx components-skill@latest add --dry-run        # list what would be written, write nothing
 npx components-skill@latest update               # refresh, keeping your edits
 npx components-skill@latest search "laptop opening"   # find a showpiece before installing
 npx components-skill@latest tokens                    # read this project's brand tokens
@@ -31,6 +32,7 @@ npx components-skill@latest tokens                    # read this project's bran
 | `--agent <name>` | `claude` \| `codex` \| `cursor` \| `gemini` \| `all`. Default `claude`. Comma-separated lists work too. `add`/`update` only. |
 | `--global` | Install into your user config dir instead of the current project. Not supported for Cursor, which has no documented user-level rules directory. |
 | `--force` | On `update`, overwrite files you have edited locally. |
+| `--dry-run` | On `add`, print every file that would be written and the install root it goes under, plus the manifest. Creates no directories and writes no files. |
 | `--library <name>` | On `search`, restrict results to one source library (`aceternity`, `magicui`, `cult-ui`, `reactbits`, `21st.dev`, `shadcn`, `tremor`, or a port library such as `vue-bits`, `inspira-ui`, `svelte-bits`). |
 | `--framework <fw>` | On `search`, which port to search: `react` (default), `vue`, or `svelte`. Composes with `--library`. |
 | `--json` | On `search` and `tokens`, print machine-readable JSON instead of a summary. |

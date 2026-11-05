@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -78,5 +78,52 @@ describe("add", () => {
 
   it("rejects an unknown agent", () => {
     assert.throws(() => add({ cwd: tmp(), agent: "emacs" }), /Unknown agent/);
+  });
+});
+
+describe("add --dry-run", () => {
+  it("touches no disk", () => {
+    const cwd = tmp();
+    const res = add({ cwd, agent: "all", dryRun: true });
+
+    assert.equal(res.length, 4);
+    assert.deepEqual(readdirSync(cwd), [], "install root left empty");
+    assert.ok(res.every((r) => r.dryRun));
+  });
+
+  it("does not create a missing install root", () => {
+    const cwd = join(tmp(), "not", "yet", "here");
+    add({ cwd, dryRun: true });
+    assert.ok(!existsSync(cwd));
+  });
+
+  it("plans exactly the files a real add writes", () => {
+    const planned = add({ cwd: tmp(), agent: "all", dryRun: true });
+    const real = add({ cwd: tmp(), agent: "all" });
+
+    for (let i = 0; i < real.length; i++) {
+      assert.equal(planned[i].agent, real[i].agent);
+      assert.deepEqual([...planned[i].files].sort(), [...real[i].files].sort());
+    }
+  });
+
+  it("prints each path and the manifest it would write", () => {
+    logs = [];
+    add({ cwd: tmp(), agent: "cursor", dryRun: true });
+    const out = logs.join("\n");
+    assert.match(out, /would write \d+ file\(s\)/);
+    assert.match(out, /\.cursor\/rules\/components\.mdc/);
+    assert.ok(out.includes(MANIFEST_NAME), "manifest listed");
+    assert.match(out, /nothing was written/);
+  });
+
+  it("does not record anything in an existing manifest", () => {
+    const cwd = tmp();
+    add({ cwd });
+    const before = readFileSync(join(cwd, MANIFEST_NAME), "utf8");
+
+    add({ cwd, agent: "codex", dryRun: true });
+    assert.equal(readFileSync(join(cwd, MANIFEST_NAME), "utf8"), before);
+    assert.ok(!existsSync(join(cwd, ".codex")));
   });
 });

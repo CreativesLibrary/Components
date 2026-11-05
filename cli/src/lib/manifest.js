@@ -51,6 +51,18 @@ export function copyInto(src, destDir, destPrefix = "", skip = new Set()) {
   return written;
 }
 
+/**
+ * The destination-relative paths copyInto(src, _, destPrefix) would write,
+ * without touching the disk. Same path rules as copyInto, so a dry run and a
+ * real run can never disagree about what lands where.
+ */
+export function planInto(src, destPrefix = "") {
+  if (statSync(src).isDirectory()) {
+    return walk(src).map((rel) => (destPrefix ? join(destPrefix, rel) : rel).split(sep).join("/"));
+  }
+  return [(destPrefix || src.split(/[\\/]/).pop()).split(sep).join("/")];
+}
+
 export function manifestPath(root) {
   return join(root, MANIFEST_NAME);
 }

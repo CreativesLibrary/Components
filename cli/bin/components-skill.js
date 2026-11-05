@@ -19,6 +19,7 @@ Options:
   --agent <name>    ${AGENTS.join(" | ")} | all      (default: claude, add/update only)
   --global          install into your user config dir instead of this project
   --force           update: overwrite files you have edited locally
+  --dry-run         add: print every file that would be written, and where; write nothing
   --library <name>  search: restrict to one source library
   --framework <fw>  search: react | vue | svelte (default react); composes with --library
   --json            search, tokens: print machine-readable JSON instead of a summary
@@ -30,6 +31,7 @@ Examples:
   npx components-skill@latest add --agent all         # every supported agent
   npx components-skill@latest add --agent cursor      # .cursor/rules + payload
   npx components-skill@latest add --global            # ~/.claude/skills/components
+  npx components-skill@latest add --agent all --dry-run   # show what would land where
   npx components-skill@latest update                  # refresh, keeping local edits
   npx components-skill@latest search "laptop opening" # find a showpiece by effect/alias
   npx components-skill@latest search card --library cult-ui
@@ -52,6 +54,7 @@ function parse(argv) {
     else if (a === "--global") opts.global = true;
     else if (a === "--force") opts.force = true;
     else if (a === "--json") opts.json = true;
+    else if (a === "--dry-run") opts.dryRun = true;
     else if (a === "--agent") {
       opts.agent = argv[++i];
       if (!opts.agent || opts.agent.startsWith("-")) throw new Error("--agent needs a value");
@@ -93,7 +96,7 @@ function main(argv) {
 
   try {
     if (cmd === "add") {
-      console.log(`Installing components skill...`);
+      console.log(opts.dryRun ? "Dry run: components skill install plan..." : "Installing components skill...");
       const r = add(opts);
       return r.length ? 0 : 1;
     }
