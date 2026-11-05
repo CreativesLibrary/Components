@@ -14,7 +14,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -200,10 +200,41 @@ function parseRef(fetchSpec) {
   return { url };
 }
 
+/**
+ * Per-entry verification from scripts/health-check.py's health-report.json
+ * (#83), when a report exists next to components.json. The deploy workflow
+ * runs the check right before this script; a local build without one gets
+ * `verified: null` and the card says so instead of inventing a date (#84).
+ */
+function loadVerification() {
+  const path = join(REPO, "health-report.json");
+  if (!existsSync(path)) return new Map();
+  let report;
+  try {
+    report = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    console.log("health-report.json is unreadable; cards will show no verification date");
+    return new Map();
+  }
+  const out = new Map();
+  for (const t of report.targets ?? []) {
+    if (t.kind !== "showpiece" || !t.entry) continue;
+    out.set(t.entry, {
+      status: t.status,
+      checkedAt: t.checked_at ?? report.generated_at ?? null,
+      lastOkAt: t.last_ok_at ?? null,
+      pin: t.pin ?? null,
+    });
+  }
+  return out;
+}
+
 function main() {
   const registry = JSON.parse(readFileSync(join(REPO, "components.json"), "utf8"));
   const byName = new Map(registry.showpiece.map((e) => [e.name, e]));
   const KNOWN_BLOCKED = knownBlockedHosts(registry);
+  const VERIFIED = loadVerification();
+  const pick = (e) => ({ ...pickFields(e), verified: VERIFIED.get(e.name) ?? null });
 
   mkdirSync(join(GALLERY, "src", "components"), { recursive: true });
 
@@ -298,7 +329,7 @@ function main() {
   );
 }
 
-function pick(e) {
+function pickFields(e) {
   return {
     name: e.name,
     library: e.library,
@@ -307,6 +338,9 @@ function pick(e) {
     license: e.license,
     deps: e.deps ?? [],
     ref: e.ref,
+    // React is the entry itself; the rest are its framework ports, which the
+    // gallery's framework filter reads (#69).
+    frameworks: ["react", ...Object.keys(e.frameworks ?? {})],
     preview: null,
   };
 }

@@ -8,6 +8,7 @@ on:
     paths:
       - "gallery/**"
       - "components.json"
+      - "scripts/health-check.py"
       - ".github/workflows/deploy-gallery.yml"
   workflow_dispatch:
 
@@ -44,6 +45,13 @@ jobs:
 
       - name: Install
         run: npm install --no-audit --no-fund
+
+      - name: Registry health check
+        # Writes health-report.json at the repo root, which the build reads for
+        # each card's "verified <date>" line (#84). Never fails the deploy: a
+        # dead upstream is data, and the card shows it.
+        working-directory: .
+        run: python3 scripts/health-check.py
 
       - name: Build
         # `build` runs scripts/fetch-showpieces.mjs first, which pulls each
