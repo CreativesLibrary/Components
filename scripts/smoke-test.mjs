@@ -20,7 +20,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname, relative } from "node:path";
+import { join, dirname, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -467,6 +467,17 @@ async function smokeTestSvelte(entry, fetchSpec, declaredDeps, knownBlocked) {
   if (!fetchSpec?.url) {
     return { name: entry.name, status: "fail", detail: "entry has no frameworks.svelte.fetch.url" };
   }
+  // This path does by hand exactly what fetch.method "registry_item" tells an
+  // agent to do. A variant declaring registry_cli would be telling users to run
+  // one of the three CLIs above that misplace the file (#66), so it fails here
+  // even though this harness would build it fine.
+  if (fetchSpec.method !== "registry_item") {
+    return {
+      name: entry.name,
+      status: "fail",
+      detail: `frameworks.svelte.fetch.method is '${fetchSpec.method}', expected 'registry_item': no CLI places Svelte Bits' $lib/ targets correctly (#66)`,
+    };
+  }
   let url;
   try {
     url = new URL(fetchSpec.url);
@@ -508,8 +519,14 @@ async function smokeTestSvelte(entry, fetchSpec, declaredDeps, knownBlocked) {
     const app = setupSvelteProject(tmp);
 
     // The one resolution step every CLI tried in setupSvelteProject's comment
-    // got wrong: SvelteKit needs nothing else to make `$lib` resolve, it
-    // always means `src/lib`.
+    // got wrong: a `$lib/` target means the project's `src/lib/`.
+    //
+    // The route below imports each file by relative path, not through the
+    // alias. Current SvelteKit removed `$lib` in favour of `#lib` and fails the
+    // build on any `$lib` import ("`$lib` has been removed"), while older
+    // versions only know `$lib`. A relative path builds on both, and the
+    // fetched Svelte Bits files themselves import no alias at all.
+    const routeDir = join(app, "src", "routes", "__smoke_test__");
     const added = [];
     const imports = [];
     svelteFiles.forEach((f, i) => {
@@ -517,7 +534,8 @@ async function smokeTestSvelte(entry, fetchSpec, declaredDeps, knownBlocked) {
       mkdirSync(dirname(join(app, localRel)), { recursive: true });
       writeFileSync(join(app, localRel), f.content);
       added.push(localRel);
-      imports.push({ varName: `SmokeEntry${i}`, specifier: f.target });
+      const fromRoute = relative(routeDir, join(app, localRel)).split(sep).join("/");
+      imports.push({ varName: `SmokeEntry${i}`, specifier: fromRoute.startsWith(".") ? fromRoute : `./${fromRoute}` });
     });
     log(`  + ${added.length} file(s): ${added.join(", ")}`);
 
@@ -530,7 +548,6 @@ async function smokeTestSvelte(entry, fetchSpec, declaredDeps, knownBlocked) {
     // silently stripped and a genuinely broken import (nonexistent package)
     // still built clean; `<X />` in the template caught the same break every
     // time.
-    const routeDir = join(app, "src", "routes", "__smoke_test__");
     mkdirSync(routeDir, { recursive: true });
     const scriptLines = imports.map((im) => `  import ${im.varName} from ${JSON.stringify(im.specifier)};`);
     const markupLines = imports.map((im) => `<${im.varName} />`);
